@@ -1,5 +1,4 @@
 #!/bin/sh
-
 set -e -x
 
 echo "Installing dependencies"
