@@ -1,538 +1,784 @@
-#include "bmstu_list.h"
+#include "bmstu_optional.h"
 
 #include <gtest/gtest.h>
 #include <algorithm>
+#include <array>
+#include <cassert>
+#include <iostream>
+#include <string>
+#include <vector>
 
-TEST(BidirectLinkedListTests, init)
+struct Tracker
 {
-	using namespace std;
+	Tracker() noexcept { ++def_ctor; }
+	Tracker(int v) noexcept : value(v) { ++param_ctor; }
+	Tracker(const Tracker& other) noexcept : value(other.value) { ++copy_ctor; }
+	Tracker(Tracker&& other) noexcept : value(other.value)
 	{
-		const bmstu::list<int> empty_int_list;
-		ASSERT_EQ(empty_int_list.size(), 0u);
-		ASSERT_TRUE(empty_int_list.empty());
+		++move_ctor;
+		other.value = -1;
 	}
 
+	Tracker& operator=(const Tracker& other) noexcept
 	{
-		const bmstu::list<string> empty_string_list;
-		ASSERT_EQ(empty_string_list.size(), 0u);
-		ASSERT_TRUE(empty_string_list.empty());
+		if (this != &other)
+		{
+			value = other.value;
+			++copy_assign;
+		}
+		return *this;
+	}
+
+	Tracker& operator=(Tracker&& other) noexcept
+	{
+		value = other.value;
+		other.value = -1;
+		++move_assign;
+		return *this;
+	}
+
+	~Tracker() { ++dtor; }
+
+	static void reset()
+	{
+		def_ctor = 0;
+		param_ctor = 0;
+		copy_ctor = 0;
+		move_ctor = 0;
+		copy_assign = 0;
+		move_assign = 0;
+		dtor = 0;
+	}
+
+	int value = 0;
+	inline static int def_ctor = 0;
+	inline static int param_ctor = 0;
+	inline static int copy_ctor = 0;
+	inline static int move_ctor = 0;
+	inline static int copy_assign = 0;
+	inline static int move_assign = 0;
+	inline static int dtor = 0;
+};
+
+struct sample_class
+{
+	sample_class() = default;
+	~sample_class() { std::cout << "SAMPLE CLASS DELETE" << std::endl; }
+	size_t a;
+	bool b;
+	char data[1000];
+};
+
+struct Z
+{
+	Z() noexcept { ++def_ctor; }
+	Z(const Z&) noexcept { ++copy_ctor; }
+	Z(Z&&) noexcept { ++move_ctor; }
+
+	Z& operator=(const Z& other) noexcept
+	{
+		if (this != &other)
+		{
+			++copy_assign;
+		}
+		return *this;
+	}
+
+	Z& operator=(Z&& other) noexcept
+	{
+		++move_assign;
+		return *this;
+	}
+
+	~Z() { ++dtor; }
+
+	void update() const& { ++const_lvalue_call_count; }
+	void update() & { ++lvalue_call_count; }
+	void update() && { ++rvalue_call_count; }
+
+	static size_t instance_count()
+	{
+		return def_ctor + copy_ctor + move_ctor - dtor;
+	}
+
+	static void reset()
+	{
+		def_ctor = 0;
+		copy_ctor = 0;
+		move_ctor = 0;
+		copy_assign = 0;
+		move_assign = 0;
+		dtor = 0;
+		lvalue_call_count = 0;
+		rvalue_call_count = 0;
+		const_lvalue_call_count = 0;
+	}
+
+	static void print_state()
+	{
+		std::cout << " " << std::endl;
+		std::cout << "def_ctor: => " << def_ctor << " " << std::endl;
+		std::cout << "copy_ctor: => " << copy_ctor << " " << std::endl;
+		std::cout << "move_ctor: => " << move_ctor << " " << std::endl;
+		std::cout << "copy_assign: => " << copy_assign << " " << std::endl;
+		std::cout << "move_assign: => " << move_assign << " " << std::endl;
+		std::cout << "dtor: => " << dtor << " " << std::endl;
+		std::cout << "lvalue_call_count: => " << lvalue_call_count << " "
+				  << std::endl;
+		std::cout << "rvalue_call_count: => " << rvalue_call_count << " "
+				  << std::endl;
+		std::cout << "const_lvalue_call_count: => " << const_lvalue_call_count
+				  << " " << std::endl;
+		std::cout << " " << std::endl;
+	}
+
+	inline static size_t def_ctor = 0;
+	inline static size_t copy_ctor = 0;
+	inline static size_t move_ctor = 0;
+	inline static size_t copy_assign = 0;
+	inline static size_t move_assign = 0;
+	inline static size_t dtor = 0;
+	inline static size_t lvalue_call_count = 0;
+	inline static size_t rvalue_call_count = 0;
+	inline static size_t const_lvalue_call_count = 0;
+};
+
+TEST(Optional, Test)
+{
+	int a = 6;
+	bmstu::optional<int> b;
+	ASSERT_FALSE(b.has_value());
+	b = a;
+	ASSERT_TRUE(b.has_value());
+	ASSERT_EQ(b.value(), 6);
+}
+
+TEST(Optional, Test2)
+{
+	std::string str = "123456700000090-00000030912-93123123123123";
+	bmstu::optional<std::string> b;
+	ASSERT_FALSE(b.has_value());
+	b = str;
+	ASSERT_TRUE(b.has_value());
+	ASSERT_STREQ(b.value().c_str(),
+				 "123456700000090-00000030912-93123123123123");
+}
+
+TEST(Optional, Test3)
+{
+	std::string str = "123456700000090-00000030912-93123123123123";
+	bmstu::optional<std::string> b;
+	ASSERT_FALSE(b.has_value());
+	b = std::move(str);
+	ASSERT_TRUE(b.has_value());
+	ASSERT_STREQ(b.value().c_str(),
+				 "123456700000090-00000030912-93123123123123");
+}
+
+TEST(Optional, Init)
+{
+	Z::reset();
+	{
+		bmstu::optional<Z> o;
+		ASSERT_FALSE(o.has_value());
+		ASSERT_EQ(Z::instance_count(), 0);
+	}
+	ASSERT_EQ(Z::instance_count(), 0);
+	Z::reset();
+	{
+		Z z;
+		bmstu::optional<Z> o(z);
+		ASSERT_TRUE(o.has_value());
+		ASSERT_TRUE(Z::def_ctor == 1 && Z::copy_ctor == 1);
+		ASSERT_EQ(Z::instance_count(), 2);
+	}
+	ASSERT_EQ(Z::instance_count(), 0);
+	Z::reset();
+	{
+		Z z;
+		bmstu::optional<Z> o(std::move(z));
+		ASSERT_TRUE(o.has_value());
+		ASSERT_EQ(Z::def_ctor, 1);
+		ASSERT_EQ(Z::move_ctor, 1);
+		ASSERT_EQ(Z::copy_ctor, 0);
+		ASSERT_EQ(Z::copy_assign, 0);
+		ASSERT_EQ(Z::move_assign, 0);
+		ASSERT_EQ(Z::instance_count(), 2);
+	}
+	ASSERT_EQ(Z::instance_count(), 0);
+}
+
+TEST(Optional, Bug)
+{
+	Z::reset();
+	{
+		bmstu::optional<Z> o1;
+		bmstu::optional<Z> o2{Z{}};
+		Z::reset();
+		o1 = std::move(o2);
+		Z::print_state();
+		ASSERT_EQ(Z::def_ctor, 0);
+		ASSERT_EQ(Z::move_ctor, 1);
+		ASSERT_EQ(Z::copy_ctor, 0);
+		ASSERT_EQ(Z::copy_assign, 0);
+		ASSERT_EQ(Z::move_assign, 0);
+		ASSERT_EQ(Z::instance_count(), 1);
 	}
 }
 
-TEST(BidirectLinkedListTests, push_front)
+TEST(Optional, DefaultConstructor)
 {
-	using namespace std;
+	bmstu::optional<int> opt;
+	ASSERT_FALSE(opt.has_value());
+}
+
+TEST(Optional, ValueConstructorCopy)
+{
+	Tracker::reset();
 	{
-		bmstu::list<int> l;
-		ASSERT_TRUE(l.empty());
-		ASSERT_EQ(l.size(), 0u);
+		Tracker t(42);
+		bmstu::optional<Tracker> opt(t);
+		ASSERT_TRUE(opt.has_value());
+		ASSERT_EQ(opt.value().value, 42);
+		ASSERT_EQ(Tracker::param_ctor, 1);
+		ASSERT_EQ(Tracker::copy_ctor, 1);
+	}
+	ASSERT_EQ(Tracker::dtor, 2);
+}
 
-		l.push_front(0);
-		l.push_front(1);
-		ASSERT_EQ(l.size(), 2);
-		ASSERT_TRUE(!l.empty());
+TEST(Optional, ValueConstructorMove)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt(Tracker(42));
+		ASSERT_TRUE(opt.has_value());
+		ASSERT_EQ(opt.value().value, 42);
+		ASSERT_EQ(Tracker::param_ctor, 1);
+		ASSERT_EQ(Tracker::move_ctor, 1);
+	}
+	ASSERT_EQ(Tracker::dtor, 2);
+}
 
-		l.clear();
-		ASSERT_EQ(l.size(), 0);
-		ASSERT_TRUE(l.empty());
+TEST(Optional, CopyConstructorFromEmpty)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt1;
+		bmstu::optional<Tracker> opt2(opt1);
+		ASSERT_FALSE(opt1.has_value());
+		ASSERT_FALSE(opt2.has_value());
+		ASSERT_EQ(Tracker::copy_ctor, 0);
+	}
+	ASSERT_EQ(Tracker::dtor, 0);
+}
+
+TEST(Optional, CopyConstructorFromValue)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt1(Tracker(42));
+		Tracker::reset();
+		bmstu::optional<Tracker> opt2(opt1);
+		ASSERT_TRUE(opt1.has_value());
+		ASSERT_TRUE(opt2.has_value());
+		ASSERT_EQ(opt2.value().value, 42);
+		ASSERT_EQ(Tracker::copy_ctor, 1);
 	}
 }
 
-TEST(BidirectLinkedListTests, push_back)
+TEST(Optional, MoveConstructorFromEmpty)
 {
-	using namespace std;
+	Tracker::reset();
 	{
-		bmstu::list<int> l;
-		ASSERT_TRUE(l.empty());
-		ASSERT_EQ(l.size(), 0u);
-
-		l.push_back(1);
-		l.push_back(1);
-		l.push_back(3);
-		ASSERT_EQ(l.size(), 3);
-		ASSERT_TRUE(!l.empty());
-
-		l.clear();
-		ASSERT_EQ(l.size(), 0);
-		ASSERT_TRUE(l.empty());
+		bmstu::optional<Tracker> opt1;
+		bmstu::optional<Tracker> opt2(std::move(opt1));
+		ASSERT_FALSE(opt2.has_value());
+		ASSERT_EQ(Tracker::move_ctor, 0);
 	}
 }
 
-TEST(BidirectLinkedListTests, deletion_spy)
+TEST(Optional, MoveConstructorFromValue)
 {
-	struct DeletionSpy
+	Tracker::reset();
 	{
-		DeletionSpy() = default;
+		bmstu::optional<Tracker> opt1(Tracker(42));
+		Tracker::reset();
+		bmstu::optional<Tracker> opt2(std::move(opt1));
+		ASSERT_TRUE(opt2.has_value());
+		ASSERT_EQ(opt2.value().value, 42);
+		ASSERT_EQ(Tracker::move_ctor, 1);
+	}
+}
 
-		explicit DeletionSpy(int& instance_counter) noexcept
-			: instance_counter_ptr_(&instance_counter)	//
-		{
-			OnAddInstance();
-		}
+TEST(Optional, AssignValueToEmpty)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt;
+		Tracker t(42);
+		Tracker::reset();
+		opt = t;
+		ASSERT_TRUE(opt.has_value());
+		ASSERT_EQ(opt.value().value, 42);
+		ASSERT_EQ(Tracker::copy_ctor, 1);
+		ASSERT_EQ(Tracker::copy_assign, 0);
+	}
+}
 
-		DeletionSpy(const DeletionSpy& other) noexcept
-			: instance_counter_ptr_(other.instance_counter_ptr_)  //
-		{
-			OnAddInstance();
-		}
+TEST(Optional, AssignValueToValue)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt(Tracker(10));
+		Tracker t(42);
+		Tracker::reset();
+		opt = t;
+		ASSERT_TRUE(opt.has_value());
+		ASSERT_EQ(opt.value().value, 42);
+		ASSERT_EQ(Tracker::copy_assign, 1);
+		ASSERT_EQ(Tracker::copy_ctor, 0);
+	}
+}
 
-		DeletionSpy& operator=(const DeletionSpy& rhs) noexcept
-		{
-			if (this != &rhs)
-			{
-				auto rhs_copy(rhs);
-				std::swap(instance_counter_ptr_,
-						  rhs_copy.instance_counter_ptr_);
-			}
-			return *this;
-		}
+TEST(Optional, AssignRvalueToEmpty)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt;
+		opt = Tracker(42);
+		ASSERT_TRUE(opt.has_value());
+		ASSERT_EQ(opt.value().value, 42);
+		ASSERT_EQ(Tracker::param_ctor, 1);
+		ASSERT_EQ(Tracker::move_ctor, 1);
+		ASSERT_EQ(Tracker::move_assign, 0);
+	}
+}
 
-		~DeletionSpy() { OnDeleteInstance(); }
+TEST(Optional, AssignRvalueToValue)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt(Tracker(10));
+		Tracker::reset();
+		opt = Tracker(42);
+		ASSERT_TRUE(opt.has_value());
+		ASSERT_EQ(opt.value().value, 42);
+		ASSERT_EQ(Tracker::move_assign, 1);
+		ASSERT_EQ(Tracker::move_ctor, 0);
+	}
+}
 
-	   private:
-		void OnAddInstance() noexcept
-		{
-			if (instance_counter_ptr_)
-			{
-				++(*instance_counter_ptr_);
-			}
-		}
+TEST(Optional, AssignOptionalToEmpty)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt1(Tracker(42));
+		bmstu::optional<Tracker> opt2;
+		Tracker::reset();
+		opt2 = opt1;
+		ASSERT_TRUE(opt1.has_value());
+		ASSERT_TRUE(opt2.has_value());
+		ASSERT_EQ(opt2.value().value, 42);
+		ASSERT_EQ(Tracker::copy_ctor, 1);
+	}
+}
 
-		void OnDeleteInstance() noexcept
-		{
-			if (instance_counter_ptr_)
-			{
-				ASSERT_NE(*instance_counter_ptr_, 0);
-				--(*instance_counter_ptr_);
-			}
-		}
+TEST(Optional, AssignOptionalToValue)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt1(Tracker(42));
+		bmstu::optional<Tracker> opt2(Tracker(10));
+		Tracker::reset();
+		opt2 = opt1;
+		ASSERT_TRUE(opt2.has_value());
+		ASSERT_EQ(opt2.value().value, 42);
+		ASSERT_EQ(Tracker::copy_assign, 1);
+		ASSERT_EQ(Tracker::copy_ctor, 0);
+	}
+}
 
-		int* instance_counter_ptr_ = nullptr;
+TEST(Optional, AssignEmptyOptionalToValue)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt1;
+		bmstu::optional<Tracker> opt2(Tracker(42));
+		Tracker::reset();
+		opt2 = opt1;
+		ASSERT_FALSE(opt2.has_value());
+		ASSERT_EQ(Tracker::dtor, 1);
+	}
+}
+
+TEST(Optional, MoveAssignOptionalToEmpty)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt1(Tracker(42));
+		bmstu::optional<Tracker> opt2;
+		Tracker::reset();
+		opt2 = std::move(opt1);
+		ASSERT_TRUE(opt2.has_value());
+		ASSERT_EQ(opt2.value().value, 42);
+		ASSERT_EQ(Tracker::move_ctor, 1);
+		ASSERT_EQ(Tracker::copy_ctor, 0);
+	}
+}
+
+TEST(Optional, MoveAssignOptionalToValue)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt1(Tracker(42));
+		bmstu::optional<Tracker> opt2(Tracker(10));
+		Tracker::reset();
+		opt2 = std::move(opt1);
+		ASSERT_TRUE(opt2.has_value());
+		ASSERT_EQ(opt2.value().value, 42);
+		ASSERT_EQ(Tracker::move_assign, 1);
+		ASSERT_EQ(Tracker::move_ctor, 0);
+	}
+}
+
+TEST(Optional, DereferenceOperator)
+{
+	bmstu::optional<int> opt(42);
+	ASSERT_EQ(*opt, 42);
+	*opt = 100;
+	ASSERT_EQ(*opt, 100);
+}
+
+TEST(Optional, ArrowOperator)
+{
+	struct Point
+	{
+		int x, y;
+	};
+	bmstu::optional<Point> opt(Point{10, 20});
+	ASSERT_EQ(opt->x, 10);
+	ASSERT_EQ(opt->y, 20);
+	opt->x = 100;
+	ASSERT_EQ(opt->x, 100);
+}
+
+TEST(Optional, ValueMethod)
+{
+	bmstu::optional<int> opt(42);
+	ASSERT_EQ(opt.value(), 42);
+	opt.value() = 100;
+	ASSERT_EQ(opt.value(), 100);
+}
+
+TEST(Optional, ValueMethodThrows)
+{
+	bmstu::optional<int> opt;
+	ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
+}
+
+TEST(Optional, ConstAccess)
+{
+	const bmstu::optional<int> opt(42);
+	ASSERT_EQ(*opt, 42);
+	ASSERT_EQ(opt.value(), 42);
+}
+
+TEST(Optional, Emplace)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt;
+		opt.emplace(42);
+		ASSERT_TRUE(opt.has_value());
+		ASSERT_EQ(opt.value().value, 42);
+		ASSERT_EQ(Tracker::param_ctor, 1);
+	}
+}
+
+TEST(Optional, EmplaceOverwrite)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt(Tracker(10));
+		Tracker::reset();
+		opt.emplace(42);
+		ASSERT_TRUE(opt.has_value());
+		ASSERT_EQ(opt.value().value, 42);
+		ASSERT_EQ(Tracker::dtor, 1);
+		ASSERT_EQ(Tracker::param_ctor, 1);
+	}
+}
+
+TEST(Optional, Reset)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt(Tracker(42));
+		Tracker::reset();
+		opt.reset();
+		ASSERT_FALSE(opt.has_value());
+		ASSERT_EQ(Tracker::dtor, 1);
+	}
+}
+
+TEST(Optional, ResetEmpty)
+{
+	bmstu::optional<int> opt;
+	opt.reset();
+	ASSERT_FALSE(opt.has_value());
+}
+
+TEST(Optional, HasValue)
+{
+	bmstu::optional<int> opt1;
+	ASSERT_FALSE(opt1.has_value());
+
+	bmstu::optional<int> opt2(42);
+	ASSERT_TRUE(opt2.has_value());
+
+	opt2.reset();
+	ASSERT_FALSE(opt2.has_value());
+}
+
+TEST(Optional, SelfAssignment)
+{
+	bmstu::optional<int> opt(42);
+	opt = opt;
+	ASSERT_TRUE(opt.has_value());
+	ASSERT_EQ(opt.value(), 42);
+}
+
+TEST(Optional, StringOptional)
+{
+	bmstu::optional<std::string> opt;
+	ASSERT_FALSE(opt.has_value());
+
+	opt = std::string("Hello, World!");
+	ASSERT_TRUE(opt.has_value());
+	ASSERT_EQ(opt.value(), "Hello, World!");
+
+	opt.emplace("New String");
+	ASSERT_EQ(opt.value(), "New String");
+
+	opt.reset();
+	ASSERT_FALSE(opt.has_value());
+}
+
+TEST(Optional, ChainedOperations)
+{
+	bmstu::optional<int> opt;
+	opt = 10;
+	opt = 20;
+	opt = 30;
+	ASSERT_EQ(opt.value(), 30);
+
+	opt.reset();
+	opt = 40;
+	ASSERT_EQ(opt.value(), 40);
+}
+
+TEST(Optional, MultipleResets)
+{
+	bmstu::optional<int> opt(42);
+	opt.reset();
+	opt.reset();
+	opt.reset();
+	ASSERT_FALSE(opt.has_value());
+}
+
+TEST(Optional, ComplexType)
+{
+	struct Complex
+	{
+		std::string name;
+		int value;
+		std::vector<int> data;
 	};
 
+	bmstu::optional<Complex> opt;
+	opt.emplace(Complex{"test", 42, {1, 2, 3, 4, 5}});
+	ASSERT_TRUE(opt.has_value());
+	ASSERT_EQ(opt->name, "test");
+	ASSERT_EQ(opt->value, 42);
+	ASSERT_EQ(opt->data.size(), 5u);
+}
+
+TEST(Optional, DestructorCalls)
+{
+	Tracker::reset();
 	{
-		int item0_counter = 0;
-		int item1_counter = 0;
-		int item2_counter = 0;
-		{
-			bmstu::list<DeletionSpy> list;
-			list.push_front(DeletionSpy{item0_counter});
-			list.push_front(DeletionSpy{item1_counter});
-			list.push_front(DeletionSpy{item2_counter});
+		bmstu::optional<Tracker> opt1(Tracker(1));
+		bmstu::optional<Tracker> opt2(Tracker(2));
+		bmstu::optional<Tracker> opt3;
+	}
+	ASSERT_EQ(Tracker::dtor, 4);
+}
 
-			ASSERT_EQ(item0_counter, 1);
-			ASSERT_EQ(item1_counter, 1);
-			ASSERT_EQ(item2_counter, 1);
-			list.clear();
-			ASSERT_EQ(item0_counter, 0);
-			ASSERT_EQ(item1_counter, 0);
-			ASSERT_EQ(item2_counter, 0);
-
-			list.push_front(DeletionSpy{item0_counter});
-			list.push_front(DeletionSpy{item1_counter});
-			list.push_front(DeletionSpy{item2_counter});
-			ASSERT_EQ(item0_counter, 1);
-			ASSERT_EQ(item1_counter, 1);
-			ASSERT_EQ(item2_counter, 1);
-		}
-		ASSERT_EQ(item0_counter, 0);
-		ASSERT_EQ(item1_counter, 0);
-		ASSERT_EQ(item2_counter, 0);
+TEST(Optional, NoLeaksOnReassignment)
+{
+	Tracker::reset();
+	{
+		bmstu::optional<Tracker> opt(Tracker(1));
+		Tracker::reset();
+		opt = Tracker(2);
+		opt = Tracker(3);
+		opt = Tracker(4);
 	}
 }
 
-TEST(BidirectLinkedListTests, Throw)
+TEST(Optional, ExceptionOnValueEmpty)
 {
-	struct ThrowOnCopy
+	bmstu::optional<int> opt;
+	ASSERT_FALSE(opt.has_value());
+	ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
+}
+
+TEST(Optional, ExceptionOnConstValueEmpty)
+{
+	bmstu::optional<int> temp;
+	const bmstu::optional<int>& opt = temp;
+	ASSERT_FALSE(opt.has_value());
+	ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
+}
+
+TEST(Optional, ExceptionMessage)
+{
+	bmstu::optional<int> opt;
+	try
 	{
-		ThrowOnCopy() = default;
-
-		explicit ThrowOnCopy(int& copy_counter) noexcept
-			: countdown_ptr(&copy_counter)
-		{
-		}
-
-		ThrowOnCopy(const ThrowOnCopy& other)
-			: countdown_ptr(other.countdown_ptr)  //
-		{
-			if (countdown_ptr)
-			{
-				if (*countdown_ptr == 0)
-				{
-					throw std::bad_alloc();
-				}
-				else
-				{
-					--(*countdown_ptr);
-				}
-			}
-		}
-
-		ThrowOnCopy& operator=(const ThrowOnCopy& rhs) = delete;
-
-		int* countdown_ptr = nullptr;
-	};
-
+		opt.value();
+		FAIL() << "Expected bad_optional_access exception";
+	}
+	catch (const bmstu::bad_optional_access& e)
 	{
-		bool exception_was_thrown = false;
-
-		for (int max_copy_counter = 5; max_copy_counter >= 0;
-			 --max_copy_counter)
-		{
-			bmstu::list<ThrowOnCopy> list;
-			list.push_front(ThrowOnCopy{});
-			try
-			{
-				int copy_counter = max_copy_counter;
-				list.push_front(ThrowOnCopy(copy_counter));
-
-				ASSERT_EQ(list.size(), 2);
-			}
-			catch (const std::bad_alloc&)
-			{
-				exception_was_thrown = true;
-
-				ASSERT_EQ(list.size(), 1);
-				break;
-			}
-		}
-		ASSERT_TRUE(exception_was_thrown);
+		ASSERT_STREQ(e.what(), "Bad optional access");
+	}
+	catch (...)
+	{
+		FAIL() << "Expected bad_optional_access exception";
 	}
 }
 
-TEST(BidirectLinkedListTests, iterators_empty)
+TEST(Optional, NoExceptionWhenHasValue)
 {
+	bmstu::optional<int> opt(42);
+	ASSERT_NO_THROW(opt.value());
+	ASSERT_EQ(opt.value(), 42);
+}
+
+TEST(Optional, ExceptionAfterReset)
+{
+	bmstu::optional<int> opt(42);
+	ASSERT_NO_THROW(opt.value());
+	opt.reset();
+	ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
+}
+
+TEST(Optional, ExceptionWithComplexType)
+{
+	bmstu::optional<std::string> opt;
+	ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
+	opt = "test";
+	ASSERT_NO_THROW(opt.value());
+	opt.reset();
+	ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
+}
+
+TEST(Optional, ExceptionAfterMove)
+{
+	bmstu::optional<int> opt1(42);
+	bmstu::optional<int> opt2;
+
+	opt2 = std::move(opt1);
+	ASSERT_NO_THROW(opt2.value());
+
+	opt2.reset();
+	ASSERT_THROW(opt2.value(), bmstu::bad_optional_access);
+}
+
+TEST(Optional, ExceptionWithEmptyOptionalAssignment)
+{
+	bmstu::optional<int> opt1;
+	bmstu::optional<int> opt2(42);
+
+	ASSERT_NO_THROW(opt2.value());
+	opt2 = opt1;
+	ASSERT_THROW(opt2.value(), bmstu::bad_optional_access);
+}
+
+TEST(Optional, MultipleExceptionChecks)
+{
+	bmstu::optional<int> opt;
+
+	ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
+	ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
+	ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
+
+	opt = 42;
+	ASSERT_NO_THROW(opt.value());
+
+	opt.reset();
+	ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
+}
+
+TEST(Optional, ExceptionSafety)
+{
+	bmstu::optional<int> opt;
+
+	try
 	{
-		bmstu::list<int> list;
-
-		const auto& const_list = list;
-
-		ASSERT_EQ(list.begin(), list.end());
-		ASSERT_EQ(const_list.begin(), const_list.end());
-		ASSERT_EQ(list.cbegin(), list.cend());
-		ASSERT_EQ(list.cbegin(), const_list.begin());
-		ASSERT_EQ(list.cend(), const_list.end());
+		opt.value();
+	}
+	catch (const bmstu::bad_optional_access&)
+	{
+		ASSERT_FALSE(opt.has_value());
+		opt = 100;
+		ASSERT_TRUE(opt.has_value());
+		ASSERT_EQ(opt.value(), 100);
 	}
 }
 
-TEST(BidirectLinkedListTests, iterators_non_empty)
+TEST(Optional, BadOptionalAccessInheritance)
 {
+	bmstu::optional<int> opt;
+
+	try
 	{
-		bmstu::list<int> list;
-		const auto& const_list = list;
-
-		list.push_front(1);
-		ASSERT_EQ(list.size(), 1u);
-		ASSERT_TRUE(!list.empty());
-
-		ASSERT_TRUE(const_list.begin() != const_list.end());
-		ASSERT_TRUE(const_list.cbegin() != const_list.cend());
-		ASSERT_TRUE(list.begin() != list.end());
-
-		ASSERT_TRUE(const_list.begin() == const_list.cbegin());
-
-		ASSERT_TRUE(*list.cbegin() == 1);
-		*list.begin() = -1;
-		ASSERT_TRUE(*list.cbegin() == -1);
-
-		const auto old_begin = list.cbegin();
-		list.push_front(2);
-		ASSERT_EQ(list.size(), 2);
-
-		const auto new_begin = list.cbegin();
-		ASSERT_NE(new_begin, old_begin);
-
-		{
-			auto new_begin_copy(new_begin);
-			ASSERT_EQ((++(new_begin_copy)), old_begin);
-		}
-
-		{
-			auto new_begin_copy(new_begin);
-			ASSERT_EQ(((new_begin_copy)++), new_begin);
-			ASSERT_EQ(new_begin_copy, old_begin);
-		}
-
-		{
-			auto old_begin_copy(old_begin);
-			ASSERT_EQ((++old_begin_copy), list.end());
-		}
+		opt.value();
+		FAIL() << "Expected exception";
+	}
+	catch (const std::exception& e)
+	{
+		ASSERT_NE(std::string(e.what()).find("Bad optional access"),
+				  std::string::npos);
 	}
 }
 
-TEST(BidirectLinkedListTests, iterators_decrement)
+TEST(Optional, ConstOptionalExceptionSafety)
 {
+	bmstu::optional<std::string> temp1;
+	const bmstu::optional<std::string>& opt1 = temp1;
+	ASSERT_THROW(opt1.value(), bmstu::bad_optional_access);
+
+	bmstu::optional<std::string> temp2("Hello");
+	const bmstu::optional<std::string>& opt2 = temp2;
+	ASSERT_NO_THROW(opt2.value());
+	ASSERT_EQ(opt2.value(), "Hello");
+}
+TEST(Optional, ExceptionWithTrackedObject)
+{
+	Tracker::reset();
 	{
-		bmstu::list<int> list;
-		const auto& const_list = list;
+		bmstu::optional<Tracker> opt;
+		ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
 
-		list.push_back(100500);
-		list.push_back(1);
-		list.push_back(2);
-		list.push_back(3);
-		ASSERT_EQ(list.size(), 4u);
-		ASSERT_TRUE(!list.empty());
+		opt.emplace(42);
+		ASSERT_NO_THROW(opt.value());
+		ASSERT_EQ(opt.value().value, 42);
 
-		ASSERT_TRUE(const_list.begin() != const_list.end());
-		ASSERT_TRUE(const_list.cbegin() != const_list.cend());
-		ASSERT_TRUE(list.begin() != list.end());
-
-		ASSERT_TRUE(const_list.begin() == const_list.cbegin());
-
-		ASSERT_EQ(*list.cbegin(), 100500);
-		*list.begin() = -1;
-		ASSERT_TRUE(*list.cbegin() == -1);
-		auto end_list = list.end();
-		auto back = --end_list;
-		ASSERT_EQ(*(end_list), 3);
+		opt.reset();
+		ASSERT_THROW(opt.value(), bmstu::bad_optional_access);
 	}
-}
-
-TEST(BidirectLinkedListTests, iterators_decrement_2)
-{
-	{
-		bmstu::list<int> list;
-		const auto& const_list = list;
-
-		list.push_back(100500);
-		list.push_back(1);
-		list.push_back(2);
-		list.push_back(3);
-		list.push_front(100501);
-		ASSERT_EQ(*(--(--list.end())), 2);
-		ASSERT_EQ(*(list.begin()), 100501);
-	}
-}
-
-TEST(BidirectLinkedListTests, iterators_back)
-{
-	{
-		using namespace std;
-		bmstu::list<int> list;
-		list.push_back(1);
-		list.push_back(2);
-		list.push_back(3);
-		list.push_back(4);
-		std::stringstream out;
-		out << list;
-		ASSERT_EQ(out.str(), "{1, 2, 3, 4}"s);
-	}
-	{
-		using namespace std;
-		bmstu::list<int> list;
-		list.push_back(1);
-		list.push_back(2);
-		list.push_front(-2);
-		list.push_front(-1);
-		std::stringstream out;
-		out << list;
-		ASSERT_EQ(out.str(), "{-1, -2, 1, 2}"s);
-	}
-}
-
-TEST(BidirectLinkedListTests, arithmetic)
-{
-	{
-		using namespace std;
-		bmstu::list<int> list;
-		list.push_back(1);
-		list.push_back(2);
-		list.push_back(3);
-		list.push_back(4);
-		bmstu::list<int>::iterator it = list.begin();
-		ASSERT_EQ(*((it + 1) + 1), 3);
-		ASSERT_EQ(*((it + 3) - 1), 3);
-	}
-	{
-		bmstu::list<int> list;
-		list.push_back(1);
-		list.push_back(2);
-		list.push_back(3);
-		list.push_back(4);
-		bmstu::list<int>::iterator it = list.end();
-		ASSERT_EQ(*(it - list.size()), 1);
-	}
-	{
-		using namespace std;
-		bmstu::list<int> list;
-		list.push_back(1);
-		list.push_back(2);
-		list.push_back(3);
-		list.push_back(4);
-		list.push_back(5);
-		bmstu::list<int>::iterator it = list.begin();
-		ASSERT_EQ(*(it + 1), 2);
-	}
-}
-
-TEST(BidirectLinkedListTests, distance)
-{
-	bmstu::list<int> list;
-	list.push_back(1);
-	list.push_back(2);
-	list.push_back(3);
-	list.push_back(4);
-	list.push_back(5);
-	ASSERT_EQ(*list.begin(), 1);
-	ASSERT_EQ(*(list.begin() + 1), 2);
-	ASSERT_EQ(*(list.begin() + 2), 3);
-	ASSERT_EQ((list.end() - list.begin()), 5);
-	ASSERT_EQ(std::distance(list.begin(), list.end()), 5);
-}
-
-TEST(BidirectLinkedListTests, operators)
-{
-	bmstu::list<int> list;
-	list.push_back(1);
-	list.push_back(2);
-	list.push_back(3);
-	list.push_back(4);
-	list.push_back(5);
-	ASSERT_EQ(list[0], 1);
-	ASSERT_EQ(list[1], 2);
-	ASSERT_EQ(list[2], 3);
-	list[1] = 100500;
-}
-
-TEST(BidirectLinkedListTests, initializer_list)
-{
-	bmstu::list<int> list{1, 2, 3, 4, 5, 6};
-	ASSERT_EQ(list[0], 1);
-	ASSERT_EQ(list[list.size() - 1], 6);
-}
-
-TEST(BidirectLinkedListTests, initializer_list_strings)
-{
-	using namespace std;
-	bmstu::list<std::string> list{"first1"s, "first2"s, "first3"s,
-								  "first4"s, "first5"s, "first6"s};
-	ASSERT_EQ(*list.begin(), "first1"s);
-}
-
-TEST(BidirectLinkedListTests, iterators_operators)
-{
-	{
-		using namespace std;
-		bmstu::list<std::string> string_list;
-
-		string_list.push_front("one"s);
-		ASSERT_EQ(string_list.cbegin()->length(), 3u);
-		string_list.begin()->push_back('!');
-		ASSERT_EQ(*string_list.begin(), std::string("one!"));
-	}
-}
-
-TEST(BidirectLinkedListTests, equals)
-{
-	bmstu::list<int> list1{1, 2, 3, 4, 5, 6};
-	bmstu::list<int> list1_1{1, 2, 3, 4, 5, 6};
-	bmstu::list<int> list3{1, 2, 3, 3, 5, 6};
-	bmstu::list<int> list2{666, 667, 668};
-	ASSERT_FALSE(list1 == list2);
-	ASSERT_FALSE(list1 == list3);
-	ASSERT_TRUE(list1 == list1_1);
-}
-
-TEST(BidirectLinkedListTests, iterators_poly)
-{
-	{
-		bmstu::list<int> list;
-		list.push_front(1);
-
-		bmstu::list<int>::const_iterator const_it(list.begin());
-		ASSERT_EQ(const_it, list.cbegin());
-		ASSERT_EQ(*const_it, *list.cbegin());
-
-		bmstu::list<int>::const_iterator const_it1;
-
-		const_it1 = list.begin();
-		ASSERT_EQ(const_it1, const_it);
-	}
-}
-
-TEST(BidirectLinkedListTests, equals2)
-{
-	bmstu::list<int> list_1;
-	list_1.push_front(1);
-	list_1.push_front(2);
-
-	bmstu::list<int> list_2;
-	list_2.push_front(1);
-	list_2.push_front(2);
-	list_2.push_front(3);
-
-	bmstu::list<int> list_1_copy;
-	list_1_copy.push_front(1);
-	list_1_copy.push_front(2);
-
-	bmstu::list<int> empty_list;
-	bmstu::list<int> another_empty_list;
-
-	ASSERT_TRUE(list_1 == list_1);
-	ASSERT_TRUE(empty_list == empty_list);
-
-	ASSERT_TRUE(list_1 == list_1_copy);
-	ASSERT_TRUE(list_1 != list_2);
-	ASSERT_TRUE(list_2 != list_1);
-	ASSERT_TRUE(empty_list == another_empty_list);
-}
-
-TEST(BidirectLinkedListTests, swap)
-{
-	bmstu::list<int> list_1{1, 2, 3};
-	bmstu::list<int> list_2{-1, -2};
-	list_1.swap(list_2);
-	ASSERT_EQ(list_1, (bmstu::list<int>{-1, -2}));
-}
-
-TEST(BidirectLinkedListTests, swap2)
-{
-	bmstu::list<int> first;
-	first.push_back(1);
-	first.push_back(2);
-
-	bmstu::list<int> second;
-	second.push_back(10);
-	second.push_back(11);
-	second.push_back(15);
-
-	const auto old_first_begin = first.begin();
-	const auto old_second_begin = second.begin();
-	const auto old_first_size = first.size();
-	const auto old_second_size = second.size();
-
-	first.swap(second);
-
-	ASSERT_EQ(second.begin(), old_first_begin);
-	ASSERT_EQ(first.begin(), old_second_begin);
-	ASSERT_EQ(second.size(), old_first_size);
-	ASSERT_EQ(first.size(), old_second_size);
-
-	{
-		using std::swap;
-
-		swap(first, second);
-
-		ASSERT_EQ(first.begin(), old_first_begin);
-		ASSERT_EQ(second.begin(), old_second_begin);
-		ASSERT_EQ(first.size(), old_first_size);
-		ASSERT_EQ(second.size(), old_second_size);
-	}
-}
-
-TEST(BidirectLinkedListTests, from_vector)
-{
-	using namespace std;
-	std::vector<std::string> my_vec = {"string1"s, "string3"s, "string4"s,
-									   "string5"s, "string6"s, "string7"s};
-	bmstu::list<std::string> my_list(my_vec.begin(), my_vec.end());
-	my_list.push_front("begin_string"s);
-	my_list.push_back("end_string"s);
-	my_vec.clear();
-	my_vec.insert(my_vec.begin(), my_list.begin(), my_list.end());
-
-	ASSERT_EQ((std::vector<std::string>{"begin_string"s, "string1"s, "string3"s,
-										"string4"s, "string5"s, "string6"s,
-										"string7"s, "end_string"s}),
-			  my_vec);
+	ASSERT_EQ(Tracker::param_ctor, 1);
+	ASSERT_EQ(Tracker::dtor, 1);
 }
